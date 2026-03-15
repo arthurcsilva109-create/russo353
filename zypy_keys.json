@@ -1,0 +1,30 @@
+{
+  "keys": {
+    "N02N-OCUE-LD82-IDN7": {
+      "label": "The last of us part 1",
+      "used": false,
+      "expires": null,
+      "files": [
+        {
+          "name": "The_Last_of_Us Part 1",
+          "url": "https://files.fm/f/jven3f7xcz",
+          "size": "12 MB",
+          "type": "exe"
+        },
+      ]
+    },
+    "ZYPY-NOVA-PACK-X2": {
+      "label": "Nova Pack X2",
+      "used": false,
+      "expires": null,
+      "files": [
+        {
+          "name": "NovaEdition_Setup.exe",
+          "url": "https://files.fm/SEU_LINK_DIRETO_3",
+          "size": "230 MB",
+          "type": "exe"
+        }
+      ]
+    }
+  }
+}
