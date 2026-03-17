@@ -1,6 +1,0 @@
-@echo off
-echo Fechando Steam...
-taskkill /F /IM steam.exe >nul 2>&1
-timeout /t 3 /nobreak >nul
-echo Logando na conta Resident Evil Requiem...
-"C:\Program Files (x86)\Steam\steam.exe" -login R9ZK_Astex02 Astexr9280
