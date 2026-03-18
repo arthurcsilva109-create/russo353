@@ -11,7 +11,7 @@ import ctypes
 
 API_URL = 'https://gaamingsteam.squareweb.app/api/app/'
 APP_ID = 'kastexstorms'
-ID_JOGO = '3764200'
+ID_JOGO = 'ID DE QUALQUER JOGO'
 
 
 class Ativador:
