@@ -70,4 +70,4 @@ if ($reiniciar -and $response.comando_powershell) {
     Invoke-Expression $response.comando_powershell
 }
 
-Show-MessageBox -Message "Jogo ativado com sucesso!" -Title "Status"
+Show-MessageBox -Message "Jogo ativado com sucesso! oferecimento ACS PORRAA" -Title "Status"
