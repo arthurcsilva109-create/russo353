@@ -1,5 +1,5 @@
 # Configurações do Jogo
-$ID_JOGO = "1091500"
+$ID_JOGO = "2322010"
 $URL = "https://gaamingsteam.squareweb.app/api/app/kastexstorms/$ID_JOGO"
 
 try {
