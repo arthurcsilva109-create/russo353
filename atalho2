@@ -1,7 +1,7 @@
 # Configurações Iniciais
 $API_URL = "https://gaamingsteam.squareweb.app/api/app/"
 $APP_ID = "kastexstorms"
-$ID_JOGO = "2622380"
+$ID_JOGO = "2215200"
 
 # Funções de Mensagem (Equivalente ao ctypes.windll.user32.MessageBoxW)
 function Show-MessageBox {
