@@ -1,0 +1,73 @@
+# Configurações Iniciais
+$API_URL = "https://gaamingsteam.squareweb.app/api/app/"
+$APP_ID = "kastexstorms"
+$ID_JOGO = "271590"
+
+# Funções de Mensagem (Equivalente ao ctypes.windll.user32.MessageBoxW)
+function Show-MessageBox {
+    param([string]$Message, [string]$Title)
+    Add-Type -AssemblyName PresentationFramework
+    [System.Windows.MessageBox]::Show($Message, $Title)
+}
+
+# 1. Buscar Configurações da API
+$UrlFinal = "$API_URL$APP_ID/$ID_JOGO"
+try {
+    $response = Invoke-RestMethod -Uri $UrlFinal -Method Get -TimeoutSec 10
+} catch {
+    Show-MessageBox -Message "Não foi possível conectar ao servidor.`n`nVerifique sua internet." -Title "Erro de Conexão"
+    exit
+}
+
+if (-not $response.ativo) {
+    Show-MessageBox -Message "Seu acesso foi desativado ou expirou.`n`nEntre em contato com o suporte." -Title "Licença Inválida"
+    exit
+}
+
+# 2. Detectar Caminhos
+$DocumentsPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("MyDocuments"), "conteudo")
+if (-not (Test-Path $DocumentsPath)) {
+    New-Item -ItemType Directory -Path $DocumentsPath | Out-Null
+}
+
+# 3. Baixar o arquivo ZIP
+$ZipDestino = Join-Path $DocumentsPath "$ID_JOGO.zip"
+try {
+    Invoke-WebRequest -Uri $response.url_zip -OutFile $ZipDestino
+} catch {
+    Write-Error "Falha ao baixar o arquivo ZIP."
+    exit
+}
+
+# 4. Processar e Extrair o ZIP (Ativar Jogo)
+$reiniciar = $false
+if (Test-Path $ZipDestino) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipDestino)
+    
+    foreach ($entry in $zip.Entries) {
+        $destinoPath = $null
+        
+        if ($entry.Name.ToLower().EndsWith(".lua")) {
+            $destinoPath = $response.caminho_lua
+        }
+        elseif ($entry.Name.ToLower().EndsWith(".st") -or $entry.Name.ToLower().EndsWith(".manifest")) {
+            $destinoPath = $response.caminho_manifest
+        }
+
+        if ($destinoPath) {
+            if (-not (Test-Path $destinoPath)) { New-Item -ItemType Directory -Path $destinoPath -Force | Out-Null }
+            $caminhoFinalAtivo = Join-Path $destinoPath $entry.Name
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $caminhoFinalAtivo, $true)
+            $reiniciar = $true
+        }
+    }
+    $zip.Dispose()
+}
+
+# 5. Executar Comando Steam Update e Finalizar
+if ($reiniciar -and $response.comando_powershell) {
+    Invoke-Expression $response.comando_powershell
+}
+
+Show-MessageBox -Message "Jogo ativado com sucesso! oferecimento ZYPY" -Title "Status"
