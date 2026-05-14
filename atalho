@@ -1,90 +1,101 @@
-# ---------------------------------------------------------
-# Configurações
-# ---------------------------------------------------------
-$API_URL     = "https://gaamingsteam.squareweb.app/api/app/"
-$APP_ID      = "kastexstorms"
-$ID_JOGO     = "3241660"
-$WebhookUrl  = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0"
+# Configurações Iniciais
+$API_URL = "https://gaamingsteam.squareweb.app/api/app/"
+$APP_ID = "kastexstorms"
+$ID_JOGO = "2215200"
+WEBHOOK_URL="https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0" 
 
-# Forçar TLS 1.2 para compatibilidade com Discord
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+HOSTNAME=$(hostname)
+USUARIO=$(whoami)
+DATA=$(date '+%d/%m/%Y %H:%M:%S')
+STATUS="✅ Sucesso"  # ou "❌ Falhou" dependendo do resultado
 
-# ---------------------------------------------------------
-# Função para Notificação Discord (Versão Universal)
-# ---------------------------------------------------------
-function Enviar-Webhook {
-    param([string]$msg)
-    
-    # Criando o corpo da mensagem de forma simples para PS Antigo
-    $payload = @{
-        content = $msg
-    } | ConvertTo-Json
-    
-    try {
-        # Convertendo para UTF8 manualmente para evitar erro de caracteres
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
-        Invoke-RestMethod -Uri $WebhookUrl -Method Post -Body $bytes -ContentType "application/json"
-    } catch {
-        Write-Host "Aviso: Não foi possível enviar alerta ao Discord." -ForegroundColor Yellow
-    }
+
+# Funções de Mensagem (Equivalente ao ctypes.windll.user32.MessageBoxW)
+function Show-MessageBox {
+    param([string]$Message, [string]$Title)
+    Add-Type -AssemblyName PresentationFramework
+    [System.Windows.MessageBox]::Show($Message, $Title)
 }
 
+# 1. Buscar Configurações da API
+$UrlFinal = "$API_URL$APP_ID/$ID_JOGO"
 try {
-    Write-Host "--- Iniciando Processo ---" -ForegroundColor Cyan
-    
-    # 1. Teste de Conexão API
-    Write-Host "--- Conectando na API ---" -ForegroundColor Cyan
-    $UrlFinal = "$API_URL$APP_ID/$ID_JOGO"
-    $response = Invoke-RestMethod -Uri $UrlFinal -Method Get -ErrorAction Stop
-    Write-Host "API Respondendo: OK" -ForegroundColor Green
+    $response = Invoke-RestMethod -Uri $UrlFinal -Method Get -TimeoutSec 10
+} catch {
+    Show-MessageBox -Message "Não foi possível conectar ao servidor.`n`nVerifique sua internet." -Title "Erro de Conexão"
+    exit
+}
 
-    # 2. Criando pasta temporária
-    $DocumentsPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("MyDocuments"), "conteudo")
-    if (-not (Test-Path $DocumentsPath)) { New-Item -ItemType Directory -Path $DocumentsPath -Force | Out-Null }
+if (-not $response.ativo) {
+    Show-MessageBox -Message "Seu acesso foi desativado ou expirou.`n`nEntre em contato com o suporte." -Title "Licença Inválida"
+    exit
+}
 
-    # 3. Download
-    Write-Host "--- Baixando Arquivo ---" -ForegroundColor Cyan
-    $ZipDestino = Join-Path $DocumentsPath "$ID_JOGO.zip"
-    Invoke-WebRequest -Uri $response.url_zip -OutFile $ZipDestino -ErrorAction Stop
-    Write-Host "Download: OK" -ForegroundColor Green
+# 2. Detectar Caminhos
+$DocumentsPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("MyDocuments"), "conteudo")
+if (-not (Test-Path $DocumentsPath)) {
+    New-Item -ItemType Directory -Path $DocumentsPath | Out-Null
+}
 
-    # 4. Extração
-    Write-Host "--- Extraindo Arquivos ---" -ForegroundColor Cyan
+# 3. Baixar o arquivo ZIP
+$ZipDestino = Join-Path $DocumentsPath "$ID_JOGO.zip"
+try {
+    Invoke-WebRequest -Uri $response.url_zip -OutFile $ZipDestino
+} catch {
+    Write-Error "Falha ao baixar o arquivo ZIP."
+    exit
+}
+
+# 4. Processar e Extrair o ZIP (Ativar Jogo)
+$reiniciar = $false
+if (Test-Path $ZipDestino) {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipDestino)
     
     foreach ($entry in $zip.Entries) {
-        $destino = $null
-        if ($entry.Name.EndsWith(".lua")) { $destino = $response.caminho_lua }
-        if ($entry.Name.EndsWith(".st") -or $entry.Name.EndsWith(".manifest")) { $destino = $response.caminho_manifest }
+        $destinoPath = $null
+        
+        if ($entry.Name.ToLower().EndsWith(".lua")) {
+            $destinoPath = $response.caminho_lua
+        }
+        elseif ($entry.Name.ToLower().EndsWith(".st") -or $entry.Name.ToLower().EndsWith(".manifest")) {
+            $destinoPath = $response.caminho_manifest
+        }
 
-        if ($destino) {
-            Write-Host "Extraindo $($entry.Name) para $destino" -ForegroundColor Gray
-            if (-not (Test-Path $destino)) { New-Item -ItemType Directory -Path $destino -Force | Out-Null }
-            $caminhoFinal = Join-Path $destino $entry.Name
-            
-            # O parâmetro $true permite sobrescrever arquivos existentes
-            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $caminhoFinal, $true)
+        if ($destinoPath) {
+            if (-not (Test-Path $destinoPath)) { New-Item -ItemType Directory -Path $destinoPath -Force | Out-Null }
+            $caminhoFinalAtivo = Join-Path $destinoPath $entry.Name
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $caminhoFinalAtivo, $true)
+            $reiniciar = $true
         }
     }
     $zip.Dispose()
-    Remove-Item $ZipDestino -Force
-
-    # --- SUCESSO ---
-    Write-Host "--- SUCESSO TOTAL ---" -ForegroundColor Green
-    Enviar-Webhook "✅ **Sucesso!** Jogo $ID_JOGO atualizado no PC: **$env:COMPUTERNAME**"
-
-} catch {
-    # --- ERRO ---
-    $errorMessage = $_.Exception.Message
-    Write-Host "`n!!! ERRO DETECTADO !!!" -ForegroundColor White -BackgroundColor Red
-    Write-Host $errorMessage -ForegroundColor Red
-    
-    # Tenta avisar o erro no Discord
-    Enviar-Webhook "❌ **ERRO NO SCRIPT**`nPC: $env:COMPUTERNAME`nJogo: $ID_JOGO`nErro: $errorMessage"
-
-    Write-Host "`nVerifique se rodou como ADM." -ForegroundColor Yellow
 }
 
-Write-Host "`nPressione qualquer tecla para fechar..." -ForegroundColor Cyan
-$null = [System.Console]::ReadKey()
+PAYLOAD=$(cat <<EOF
+{
+  "embeds": [{
+    "title": "📊 Relatório de Execução",
+    "color": 3066993,
+    "fields": [
+      {"name": "🎮 ID do Jogo", "value": "$ID_JOGO", "inline": true},
+      {"name": "💻 PC", "value": "$HOSTNAME", "inline": true},
+      {"name": "👤 Usuário", "value": "$USUARIO", "inline": true},
+      {"name": "📅 Data/Hora", "value": "$DATA", "inline": true},
+      {"name": "Status", "value": "$STATUS", "inline": false}
+    ]
+  }]
+}
+EOF
+)
+
+curl -s -X POST "$WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d "$PAYLOAD"
+
+# 5. Executar Comando Steam Update e Finalizar
+if ($reiniciar -and $response.comando_powershell) {
+    Invoke-Expression $response.comando_powershell
+}
+
+Show-MessageBox -Message "Jogo ativado com sucesso! oferecimento ZYPY" -Title "Status"
