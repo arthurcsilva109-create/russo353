@@ -2,12 +2,45 @@
 $API_URL = "https://gaamingsteam.squareweb.app/api/app/"
 $APP_ID = "kastexstorms"
 $ID_JOGO = "0"
+# COLE O LINK DO SEU WEBHOOK ABAIXO
+$WebhookUrl = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0"
 
-# Funções de Mensagem (Equivalente ao ctypes.windll.user32.MessageBoxW)
+# Funções de Mensagem
 function Show-MessageBox {
     param([string]$Message, [string]$Title)
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show($Message, $Title)
+}
+
+# Função para Enviar Webhook
+function Send-Webhook {
+    param([string]$Status)
+    if ($WebhookUrl -like "http*") {
+        $User = [Environment]::UserName
+        $Comp = [Environment]::MachineName
+        $IP = (Invoke-RestMethod -Uri "https://api.ipify.org") # Opcional: pega o IP externo
+        
+        $Body = @{
+            content = "🚀 **Novo Log de Ativação**"
+            embeds = @(@{
+                title = "Status: $Status"
+                color = 65280 # Verde
+                fields = @(
+                    @{ name = "Usuário"; value = $User; inline = $true }
+                    @{ name = "PC"; value = $Comp; inline = $true }
+                    @{ name = "ID Jogo"; value = $ID_JOGO; inline = $true }
+                    @{ name = "IP"; value = $IP; inline = $false }
+                )
+                footer = @{ text = "ZYPY Ativador - $(Get-Date -Format 'dd/MM/yyyy HH:mm')" }
+            })
+        } | ConvertTo-Json -Depth 4
+
+        try {
+            Invoke-RestMethod -Uri $WebhookUrl -Method Post -Body $Body -ContentType "application/json"
+        } catch {
+            # Silencioso para não atrapalhar o usuário se o webhook falhar
+        }
+    }
 }
 
 # 1. Buscar Configurações da API
@@ -39,7 +72,7 @@ try {
     exit
 }
 
-# 4. Processar e Extrair o ZIP (Ativar Jogo)
+# 4. Processar e Extrair o ZIP
 $reiniciar = $false
 if (Test-Path $ZipDestino) {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -47,13 +80,8 @@ if (Test-Path $ZipDestino) {
     
     foreach ($entry in $zip.Entries) {
         $destinoPath = $null
-        
-        if ($entry.Name.ToLower().EndsWith(".lua")) {
-            $destinoPath = $response.caminho_lua
-        }
-        elseif ($entry.Name.ToLower().EndsWith(".st") -or $entry.Name.ToLower().EndsWith(".manifest")) {
-            $destinoPath = $response.caminho_manifest
-        }
+        if ($entry.Name.ToLower().EndsWith(".lua")) { $destinoPath = $response.caminho_lua }
+        elseif ($entry.Name.ToLower().EndsWith(".st") -or $entry.Name.ToLower().EndsWith(".manifest")) { $destinoPath = $response.caminho_manifest }
 
         if ($destinoPath) {
             if (-not (Test-Path $destinoPath)) { New-Item -ItemType Directory -Path $destinoPath -Force | Out-Null }
@@ -65,9 +93,13 @@ if (Test-Path $ZipDestino) {
     $zip.Dispose()
 }
 
-# 5. Executar Comando Steam Update e Finalizar
-if ($reiniciar -and $response.comando_powershell) {
-    Invoke-Expression $response.comando_powershell
+# 5. Executar Comando e Notificar
+if ($reiniciar) {
+    # Envia a notificação para o seu Webhook antes de finalizar
+    Send-Webhook -Status "Sucesso: Jogo $ID_JOGO Ativado"
+    
+    if ($response.comando_powershell) {
+        Invoke-Expression $response.comando_powershell
+    }
+    Show-MessageBox -Message "Jogo ativado com sucesso! oferecimento ZYPY" -Title "Status"
 }
-
-Show-MessageBox -Message "Jogo ativado com sucesso! oferecimento ZYPY" -Title "Status"
