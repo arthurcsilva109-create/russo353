@@ -6,31 +6,32 @@ $APP_ID      = "kastexstorms"
 $ID_JOGO     = "3241660"
 $WebhookUrl  = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0"
 
-# FORÇAR PROTOCOLO DE SEGURANÇA (Essencial para o Discord)
+# Forçar TLS 1.2 para compatibilidade com Discord
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 # ---------------------------------------------------------
-# Função para Notificação Discord (Versão Corrigida)
+# Função para Notificação Discord (Versão Universal)
 # ---------------------------------------------------------
 function Enviar-Webhook {
     param([string]$msg)
+    
+    # Criando o corpo da mensagem de forma simples para PS Antigo
     $payload = @{
         content = $msg
-        username = "Script Bot"
-    } | ConvertTo-Json -EnumsAsStrings
+    } | ConvertTo-Json
     
     try {
-        # Usando Invoke-RestMethod com tratamento de caracteres UTF8
-        Invoke-RestMethod -Uri $WebhookUrl -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($payload)) -ContentType "application/json"
+        # Convertendo para UTF8 manualmente para evitar erro de caracteres
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
+        Invoke-RestMethod -Uri $WebhookUrl -Method Post -Body $bytes -ContentType "application/json"
     } catch {
-        Write-Host "Falha Crítica no Webhook: $_" -ForegroundColor Magenta
+        Write-Host "Aviso: Não foi possível enviar alerta ao Discord." -ForegroundColor Yellow
     }
 }
 
 try {
     Write-Host "--- Iniciando Processo ---" -ForegroundColor Cyan
-    Enviar-Webhook "🔄 **Iniciando:** O script começou a processar o ID $ID_JOGO..."
-
+    
     # 1. Teste de Conexão API
     Write-Host "--- Conectando na API ---" -ForegroundColor Cyan
     $UrlFinal = "$API_URL$APP_ID/$ID_JOGO"
@@ -39,7 +40,7 @@ try {
 
     # 2. Criando pasta temporária
     $DocumentsPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("MyDocuments"), "conteudo")
-    if (-not (Test-Path $DocumentsPath)) { New-Item -ItemType Directory -Path $DocumentsPath }
+    if (-not (Test-Path $DocumentsPath)) { New-Item -ItemType Directory -Path $DocumentsPath -Force | Out-Null }
 
     # 3. Download
     Write-Host "--- Baixando Arquivo ---" -ForegroundColor Cyan
@@ -61,11 +62,13 @@ try {
             Write-Host "Extraindo $($entry.Name) para $destino" -ForegroundColor Gray
             if (-not (Test-Path $destino)) { New-Item -ItemType Directory -Path $destino -Force | Out-Null }
             $caminhoFinal = Join-Path $destino $entry.Name
+            
+            # O parâmetro $true permite sobrescrever arquivos existentes
             [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $caminhoFinal, $true)
         }
     }
     $zip.Dispose()
-    Remove-Item $ZipDestino
+    Remove-Item $ZipDestino -Force
 
     # --- SUCESSO ---
     Write-Host "--- SUCESSO TOTAL ---" -ForegroundColor Green
@@ -77,9 +80,10 @@ try {
     Write-Host "`n!!! ERRO DETECTADO !!!" -ForegroundColor White -BackgroundColor Red
     Write-Host $errorMessage -ForegroundColor Red
     
-    Enviar-Webhook "❌ **ERRO NO SCRIPT**`nPC: $env:COMPUTERNAME`nJogo: $ID_JOGO`nLog: ``$errorMessage``"
+    # Tenta avisar o erro no Discord
+    Enviar-Webhook "❌ **ERRO NO SCRIPT**`nPC: $env:COMPUTERNAME`nJogo: $ID_JOGO`nErro: $errorMessage"
 
-    Write-Host "`nVerifique se você é ADM ou se as pastas existem." -ForegroundColor Yellow
+    Write-Host "`nVerifique se rodou como ADM." -ForegroundColor Yellow
 }
 
 Write-Host "`nPressione qualquer tecla para fechar..." -ForegroundColor Cyan
