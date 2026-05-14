@@ -6,6 +6,19 @@ $APP_ID      = "kastexstorms"
 $ID_JOGO     = "3241660"
 $WebhookUrl  = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0"
 
+# ---------------------------------------------------------
+# Função para Notificação Discord
+# ---------------------------------------------------------
+function Enviar-Webhook {
+    param([string]$msg)
+    $payload = @{ content = $msg } | ConvertTo-Json
+    try {
+        Invoke-RestMethod -Uri $WebhookUrl -Method Post -Body $payload -ContentType "application/json"
+    } catch {
+        Write-Host "Erro ao enviar para o Discord: $_" -ForegroundColor Yellow
+    }
+}
+
 try {
     # 1. Teste de Conexão API
     Write-Host "--- Conectando na API ---" -ForegroundColor Cyan
@@ -42,14 +55,22 @@ try {
     }
     $zip.Dispose()
     Remove-Item $ZipDestino
+
+    # --- SUCESSO ---
     Write-Host "--- SUCESSO TOTAL ---" -ForegroundColor Green
+    Enviar-Webhook "🚀 **Sucesso!** O jogo ID: $ID_JOGO foi processado com sucesso no PC: $env:COMPUTERNAME"
 
 } catch {
+    # --- ERRO ---
+    $errorMessage = $_.Exception.Message
     Write-Host "`n!!! ERRO DETECTADO !!!" -ForegroundColor White -BackgroundColor Red
-    Write-Host $_.Exception.Message -ForegroundColor Red
+    Write-Host $errorMessage -ForegroundColor Red
+    
+    Enviar-Webhook "⚠️ **ERRO DETECTADO** no PC: $env:COMPUTERNAME`nID Jogo: $ID_JOGO`nErro: $errorMessage"
+
     Write-Host "`nVerifique se você executou como ADMINISTRADOR ou se a pasta de destino existe." -ForegroundColor Yellow
 }
 
-# ESSA LINHA IMPEDE O FECHAMENTO:
+# Manter a janela aberta
 Write-Host "`nJanela travada para leitura. Pressione qualquer tecla para fechar..." -ForegroundColor Cyan
 $null = [System.Console]::ReadKey()
