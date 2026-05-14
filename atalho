@@ -3,7 +3,7 @@
 # ---------------------------------------------------------
 $API_URL     = "https://gaamingsteam.squareweb.app/api/app/"
 $APP_ID      = "kastexstorms"
-$ID_JOGO     = "0"
+$ID_JOGO     = "3241660"
 $WebhookUrl  = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0"
 
 try {
