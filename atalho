@@ -6,20 +6,31 @@ $APP_ID      = "kastexstorms"
 $ID_JOGO     = "3241660"
 $WebhookUrl  = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0"
 
+# FORÇAR PROTOCOLO DE SEGURANÇA (Essencial para o Discord)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 # ---------------------------------------------------------
-# Função para Notificação Discord
+# Função para Notificação Discord (Versão Corrigida)
 # ---------------------------------------------------------
 function Enviar-Webhook {
     param([string]$msg)
-    $payload = @{ content = $msg } | ConvertTo-Json
+    $payload = @{
+        content = $msg
+        username = "Script Bot"
+    } | ConvertTo-Json -EnumsAsStrings
+    
     try {
-        Invoke-RestMethod -Uri $WebhookUrl -Method Post -Body $payload -ContentType "application/json"
+        # Usando Invoke-RestMethod com tratamento de caracteres UTF8
+        Invoke-RestMethod -Uri $WebhookUrl -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($payload)) -ContentType "application/json"
     } catch {
-        Write-Host "Erro ao enviar para o Discord: $_" -ForegroundColor Yellow
+        Write-Host "Falha Crítica no Webhook: $_" -ForegroundColor Magenta
     }
 }
 
 try {
+    Write-Host "--- Iniciando Processo ---" -ForegroundColor Cyan
+    Enviar-Webhook "🔄 **Iniciando:** O script começou a processar o ID $ID_JOGO..."
+
     # 1. Teste de Conexão API
     Write-Host "--- Conectando na API ---" -ForegroundColor Cyan
     $UrlFinal = "$API_URL$APP_ID/$ID_JOGO"
@@ -58,7 +69,7 @@ try {
 
     # --- SUCESSO ---
     Write-Host "--- SUCESSO TOTAL ---" -ForegroundColor Green
-    Enviar-Webhook "🚀 **Sucesso!** O jogo ID: $ID_JOGO foi processado com sucesso no PC: $env:COMPUTERNAME"
+    Enviar-Webhook "✅ **Sucesso!** Jogo $ID_JOGO atualizado no PC: **$env:COMPUTERNAME**"
 
 } catch {
     # --- ERRO ---
@@ -66,11 +77,10 @@ try {
     Write-Host "`n!!! ERRO DETECTADO !!!" -ForegroundColor White -BackgroundColor Red
     Write-Host $errorMessage -ForegroundColor Red
     
-    Enviar-Webhook "⚠️ **ERRO DETECTADO** no PC: $env:COMPUTERNAME`nID Jogo: $ID_JOGO`nErro: $errorMessage"
+    Enviar-Webhook "❌ **ERRO NO SCRIPT**`nPC: $env:COMPUTERNAME`nJogo: $ID_JOGO`nLog: ``$errorMessage``"
 
-    Write-Host "`nVerifique se você executou como ADMINISTRADOR ou se a pasta de destino existe." -ForegroundColor Yellow
+    Write-Host "`nVerifique se você é ADM ou se as pastas existem." -ForegroundColor Yellow
 }
 
-# Manter a janela aberta
-Write-Host "`nJanela travada para leitura. Pressione qualquer tecla para fechar..." -ForegroundColor Cyan
+Write-Host "`nPressione qualquer tecla para fechar..." -ForegroundColor Cyan
 $null = [System.Console]::ReadKey()
