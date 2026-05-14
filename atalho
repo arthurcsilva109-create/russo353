@@ -2,72 +2,24 @@
 $API_URL = "https://gaamingsteam.squareweb.app/api/app/"
 $APP_ID = "kastexstorms"
 $ID_JOGO = "2215200"
-$WEBHOOK_URL = "https://discord.com/api/webhooks/1504479978652303531/mL7S7SbUoOVYplPtqJvQHOX1UeZFxoLSXgPYCvHDkepJbJVu6PSZgjhzGOfxW4yegEq0"
 
-# Funções de Mensagem
+# Funções de Mensagem (Equivalente ao ctypes.windll.user32.MessageBoxW)
 function Show-MessageBox {
     param([string]$Message, [string]$Title)
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show($Message, $Title)
 }
 
-# Função para enviar relatório ao Discord
-function Send-DiscordReport {
-    param(
-        [string]$Status,
-        [string]$Descricao,
-        [int]$Cor
-    )
-
-    $PCInfo = @{
-        hostname = $env:COMPUTERNAME
-        usuario  = $env:USERNAME
-        os       = (Get-CimInstance Win32_OperatingSystem).Caption
-        ip       = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike "*Loopback*" } | Select-Object -First 1).IPAddress
-        data     = (Get-Date -Format "dd/MM/yyyy HH:mm:ss")
-    }
-
-    $payload = [ordered]@{
-        embeds = @(
-            [ordered]@{
-                title  = "Relatorio - ID Jogo: $ID_JOGO"
-                color  = $Cor
-                fields = @(
-                    [ordered]@{ name = "PC";         value = "$($PCInfo.hostname)"; inline = $true  }
-                    [ordered]@{ name = "Usuario";    value = "$($PCInfo.usuario)";  inline = $true  }
-                    [ordered]@{ name = "IP";         value = "$($PCInfo.ip)";       inline = $true  }
-                    [ordered]@{ name = "Sistema";    value = "$($PCInfo.os)";       inline = $false }
-                    [ordered]@{ name = "ID do Jogo"; value = "$ID_JOGO";            inline = $true  }
-                    [ordered]@{ name = "Status";     value = "$Status";             inline = $true  }
-                    [ordered]@{ name = "Detalhe";    value = "$Descricao";          inline = $false }
-                    [ordered]@{ name = "Data Hora";  value = "$($PCInfo.data)";     inline = $false }
-                )
-                footer = [ordered]@{ text = "ZYPY Activator" }
-            }
-        )
-    }
-
-    $json = $payload | ConvertTo-Json -Depth 10 -Compress
-
-    try {
-        Invoke-RestMethod -Uri $WEBHOOK_URL -Method Post -Body $json -ContentType "application/json; charset=utf-8" | Out-Null
-    } catch {
-        # Silencioso
-    }
-}
-
 # 1. Buscar Configurações da API
 $UrlFinal = "$API_URL$APP_ID/$ID_JOGO"
 try {
-    $response = Invoke-RestMethod -Uri $UrlFinal -Method Get -TimeoutSec 10 -UseBasicParsing -Headers @{ "Accept" = "application/json" }
+    $response = Invoke-RestMethod -Uri $UrlFinal -Method Get -TimeoutSec 10
 } catch {
-    Send-DiscordReport -Status "❌ Falhou" -Descricao "Erro ao conectar a API: $_" -Cor 15158332
     Show-MessageBox -Message "Não foi possível conectar ao servidor.`n`nVerifique sua internet." -Title "Erro de Conexão"
     exit
 }
 
 if (-not $response.ativo) {
-    Send-DiscordReport -Status "⛔ Licenca Invalida" -Descricao "Acesso desativado ou expirado para APP: $APP_ID" -Cor 16776960
     Show-MessageBox -Message "Seu acesso foi desativado ou expirou.`n`nEntre em contato com o suporte." -Title "Licença Inválida"
     exit
 }
@@ -81,25 +33,25 @@ if (-not (Test-Path $DocumentsPath)) {
 # 3. Baixar o arquivo ZIP
 $ZipDestino = Join-Path $DocumentsPath "$ID_JOGO.zip"
 try {
-    Invoke-WebRequest -Uri $response.url_zip -OutFile $ZipDestino -UseBasicParsing
+    Invoke-WebRequest -Uri $response.url_zip -OutFile $ZipDestino
 } catch {
-    Send-DiscordReport -Status "❌ Falhou" -Descricao "Erro ao baixar o ZIP: $_" -Cor 15158332
     Write-Error "Falha ao baixar o arquivo ZIP."
     exit
 }
 
-# 4. Extrair o ZIP
+# 4. Processar e Extrair o ZIP (Ativar Jogo)
 $reiniciar = $false
 if (Test-Path $ZipDestino) {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipDestino)
-
+    
     foreach ($entry in $zip.Entries) {
         $destinoPath = $null
-
+        
         if ($entry.Name.ToLower().EndsWith(".lua")) {
             $destinoPath = $response.caminho_lua
-        } elseif ($entry.Name.ToLower().EndsWith(".st") -or $entry.Name.ToLower().EndsWith(".manifest")) {
+        }
+        elseif ($entry.Name.ToLower().EndsWith(".st") -or $entry.Name.ToLower().EndsWith(".manifest")) {
             $destinoPath = $response.caminho_manifest
         }
 
@@ -113,31 +65,9 @@ if (Test-Path $ZipDestino) {
     $zip.Dispose()
 }
 
-# 5. Fechar Steam, Executar Update e Reabrir
+# 5. Executar Comando Steam Update e Finalizar
 if ($reiniciar -and $response.comando_powershell) {
-
-    # Fecha a Steam
-    $steamProcess = Get-Process -Name "steam" -ErrorAction SilentlyContinue
-    if ($steamProcess) {
-        Stop-Process -Name "steam" -Force
-        Start-Sleep -Seconds 3
-    }
-
-    # Executa o comando da API
     Invoke-Expression $response.comando_powershell
-
-    # Aguarda e reabre a Steam
-    Start-Sleep -Seconds 5
-    $steamPath = (Get-ItemProperty -Path "HKCU:\Software\Valve\Steam" -ErrorAction SilentlyContinue).SteamExe
-    if (-not $steamPath) {
-        $steamPath = "C:\Program Files (x86)\Steam\steam.exe"
-    }
-    if (Test-Path $steamPath) {
-        Start-Process $steamPath
-    }
 }
-
-# Relatório final de sucesso
-Send-DiscordReport -Status "✅ Sucesso" -Descricao "Jogo ativado e arquivos extraídos com sucesso." -Cor 3066993
 
 Show-MessageBox -Message "Jogo ativado com sucesso! oferecimento ZYPY" -Title "Status"
