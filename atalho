@@ -1,9 +1,9 @@
 # Configurações Iniciais
 $API_URL = "https://gaamingsteam.squareweb.app/api/app/"
 $APP_ID = "kastexstorms"
-$ID_JOGO = "3780140"
+$ID_JOGO = "2215200"
 
-# Funções de Mensagem
+# Funções de Mensagem (Equivalente ao ctypes.windll.user32.MessageBoxW)
 function Show-MessageBox {
     param([string]$Message, [string]$Title)
     Add-Type -AssemblyName PresentationFramework
@@ -70,4 +70,4 @@ if ($reiniciar -and $response.comando_powershell) {
     Invoke-Expression $response.comando_powershell
 }
 
-Show-MessageBox -Message "Jogo ativado com sucesso! oferecimento ZYPY" -Title "Sucesso"
+Show-MessageBox -Message "Jogo ativado com sucesso! oferecimento ZYPY" -Title "Status"
