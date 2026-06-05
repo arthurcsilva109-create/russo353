@@ -1,0 +1,113 @@
+# ==========================================
+# Configurações Iniciais
+# ==========================================
+$ID_JOGO = "1943950"
+
+# O link de página padrão do MediaFire (caso precise extrair o link direto)
+$UrlMediaFire = "https://www.mediafire.com/file/vecz7stlndcd5t6/LEGOBatmanLotDK.zip/file"
+
+# O link direto atual que você enviou (Tentativa 1)
+$UrlDiretaMediaFire = "https://download1347.mediafire.com/i2xqybr85gngB2taq8buGhUVQ2Vli-b8Iki2C0RQtOg5LLXTUjGRXApXeeKAd2WLUFqbTgkACoTylHZngTMDfXCM5ltztmEVQVhhtaTKjUQ5M4vFSV68eXnpvQZOilYAXFoysSAkxUT3H1ZjoIcSfcMwbpnI9DNdInOE2zj2l1ITgEqCzQ/vecz7stlndcd5t6/LEGOBatmanLotDK.zip"
+
+# ⚠️ Defina aqui as pastas onde o jogo precisa receber os arquivos:
+$CaminhoLuaDestino      = "C:\Caminho\Para\A\Pasta\De\Lua" 
+$CaminhoManifestDestino = "C:\Caminho\Para\A\Pasta\De\Manifest"
+
+# Funções de Mensagem de Tela
+function Show-MessageBox {
+    param([string]$Message, [string]$Title)
+    Add-Type -AssemblyName PresentationFramework
+    [System.Windows.MessageBox]::Show($Message, $Title)
+}
+
+# 1. Criar pasta temporária nos Documentos para salvar o ZIP baixado
+$DocumentsPath = [System.IO.Path]::Combine([Environment]::GetFolderPath("MyDocuments"), "conteudo_temp")
+if (-not (Test-Path $DocumentsPath)) {
+    New-Item -ItemType Directory -Path $DocumentsPath | Out-Null
+}
+$ZipDestino = Join-Path $DocumentsPath "$ID_JOGO.zip"
+
+# 2. Baixar o arquivo (Tenta o link direto primeiro; se falhar, raspa a página do MediaFire)
+Write-Host "Iniciando processo de download..."
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$SucessoDownload = $false
+
+# TENTATIVA 1: Baixar direto pelo link que você mandou
+try {
+    Write-Host "Tentando download direto pelo link fornecido..."
+    Invoke-WebRequest -Uri $UrlDiretaMediaFire -OutFile $ZipDestino -TimeoutSec 20
+    $SucessoDownload = $true
+} catch {
+    Write-Host "O link direto expirou ou falhou. Iniciando raspagem da página do MediaFire..."
+}
+
+# TENTATIVA 2: Se o link direto falhou, faz a busca dinâmica no HTML da página
+if (-not $SucessoDownload) {
+    try {
+        $WebResponse = Invoke-WebRequest -Uri $UrlMediaFire -UseBasicParsing
+        
+        # Procura no HTML pelo link do servidor de download
+        $DirectLink = $WebResponse.Links | Where-Object { $_.href -like "*download*.mediafire.com/*" } | Select-Object -First 1 -ExpandProperty href
+        
+        if (-not $DirectLink) {
+            # Segunda tentativa (procura pelo ID do botão de download no HTML)
+            $DirectLink = ([regex]'(?i)href="([^"]+)"[^>]*id="downloadButton"').Match($WebResponse.Content).Groups[1].Value
+        }
+
+        if (-not $DirectLink) {
+            throw "Não foi possível encontrar o botão de download na página do MediaFire."
+        }
+
+        Write-Host "Novo link dinâmico encontrado! Baixando..."
+        Invoke-WebRequest -Uri $DirectLink -OutFile $ZipDestino -TimeoutSec 30
+        $SucessoDownload = $true
+    } catch {
+        Show-MessageBox -Message "Falha ao baixar o arquivo do MediaFire por ambos os métodos.`n`nErro: $($_.Exception.Message)" -Title "Erro de Download"
+        exit
+    }
+}
+
+# 3. Processar e Extrair os Arquivos do ZIP
+$reiniciar = $false
+try {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipDestino)
+    
+    foreach ($entry in $zip.Entries) {
+        $destinoPath = $null
+        
+        # Filtra os arquivos por extensão para decidir o destino
+        if ($entry.Name.ToLower().EndsWith(".lua")) {
+            $destinoPath = $CaminhoLuaDestino
+        }
+        elseif ($entry.Name.ToLower().EndsWith(".st") -or $entry.Name.ToLower().EndsWith(".manifest")) {
+            $destinoPath = $CaminhoManifestDestino
+        }
+
+        # Se o arquivo for um dos tipos aceitos, extrai para a pasta correta
+        if ($destinoPath) {
+            if (-not (Test-Path $destinoPath)) { 
+                New-Item -ItemType Directory -Path $destinoPath -Force | Out-Null 
+            }
+            $caminhoFinalAtivo = Join-Path $destinoPath $entry.Name
+            
+            # Extrai substituindo se o arquivo já existir
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $caminhoFinalAtivo, $true)
+            $reiniciar = $true
+        }
+    }
+    $zip.Dispose()
+    
+    # Limpa o arquivo ZIP temporário após extrair
+    Remove-Item -Path $ZipDestino -Force -ErrorAction SilentlyContinue
+} catch {
+    Show-MessageBox -Message "Erro ao extrair os arquivos do ZIP.`n`n$($_.Exception.Message)" -Title "Erro de Extração"
+    exit
+}
+
+# 4. Finalização
+if ($reiniciar) {
+    Show-MessageBox -Message "Jogo baixado e ativado com sucesso!" -Title "Status"
+} else {
+    Show-MessageBox -Message "O download foi feito, mas nenhum arquivo válido (.lua, .st, .manifest) estava dentro do ZIP." -Title "Aviso"
+}
