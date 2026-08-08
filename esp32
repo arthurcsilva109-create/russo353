@@ -1,1 +1,7 @@
+$webhookUrl = "https://discord.com/api/webhooks/1535783841539559516/nJ49dBdlI25Atqn7-kJKJn7zgqPFClhgGh8iYrjeoDlErgZ3_hk1GWtIWUKdLgkDkC6y"
 
+$payload = @{
+    content = "Mensagem de teste enviada com sucesso."
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType 'application/json'
